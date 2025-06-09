@@ -30,7 +30,12 @@ for entry in "${PARTITIONS[@]}"; do
   END_MIB=$(echo "$START_MIB + ($SIZE * 1024)" | bc | awk '{printf "%d", $0}')
 
   echo "➕ Création de $LABEL ($SIZE Go) - $TYPE : ${START_MIB}MiB à ${END_MIB}MiB"
-  parted -s "$DISK" mkpart "$LABEL" "$TYPE" ${START_MIB}MiB ${END_MIB}MiB
+  if [[ \"$TYPE\" == \"swap\" ]]; then
+    parted -s \"$DISK\" mkpart \"$LABEL\" linux-swap ${START_MIB}MiB ${END_MIB}MiB
+  else
+    parted -s \"$DISK\" mkpart \"$LABEL\" \"$TYPE\" ${START_MIB}MiB ${END_MIB}MiB
+  fi
+
 
   DEV_PART="${DISK}${PART_NUM}"
   case "$TYPE" in
