@@ -1,0 +1,63 @@
+#!/usr/bin/env bash
+#
+# git-update — mise à jour complète d’un dépôt Git local
+#
+
+die() {
+  echo >&2 "Erreur : $*"
+  exit 1
+}
+
+git rev-parse --is-inside-work-tree &>/dev/null || die "Pas dans un dépôt Git !"
+
+# 1️⃣ Vérification des changements locaux
+output=$(git status --porcelain)
+if [ -n "$output" ]; then
+  echo "🛠️  Changements locaux détectés (non indexés, indexés ou non suivis) :"
+  git status -s
+  read -p "Voulez-vous faire 'git add -A' + commit + push ? [Y/n] " REPLY
+  REPLY=${REPLY:-Y}
+  if [[ $REPLY =~ ^[Yy] ]]; then
+    git add -A
+    read -p "Message de commit : " MSG
+    MSG=${MSG:-"Mise à jour locale automatique"}
+    git commit -m "$MSG" || die "Le commit a échoué."
+    git push || die "Le push a échoué."
+  else
+    echo "Opération annulée. Pense à commit/push manuellement."
+  fi
+fi
+
+# 2️⃣ Synchronisation distante
+echo "→ Récupération des infos distantes..."
+git fetch --prune || die "Échec du fetch."
+
+LOCAL=$(git rev-parse @) || die
+REMOTE=$(git rev-parse @{u}) || die "Branche distante non suivie."
+BASE=$(git merge-base @ @{u}) || die
+
+if [ "$LOCAL" = "$REMOTE" ]; then
+  echo "✅ La branche est à jour avec le serveur."
+elif [ "$LOCAL" = "$BASE" ]; then
+  echo "⬇️  Des changements distants sont disponibles."
+  read -p "Faire git pull ? [Y/n] " REPLY
+  REPLY=${REPLY:-Y}
+  if [[ $REPLY =~ ^[Yy] ]]; then
+    git pull --rebase || die "Le pull a échoué."
+  fi
+elif [ "$REMOTE" = "$BASE" ]; then
+  echo "⬆️  Vous avez des commits locaux non poussés."
+  read -p "Faire git push maintenant ? [Y/n] " REPLY
+  REPLY=${REPLY:-Y}
+  if [[ $REPLY =~ ^[Yy] ]]; then
+    git push || die "Le push a échoué."
+  fi
+else
+  echo "⚠️  Divergence détectée (commits locaux ET distants)."
+  echo "Gestion manuelle recommandée (merge ou rebase)."
+  exit 1
+fi
+
+echo "🧹 Prune des branches distantes supprimées..."
+git remote prune origin
+
